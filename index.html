@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Structure</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <div id="controlPanel" style="position: fixed; top: 10px; left: 10px; z-index: 1;">
+    <button id="startOver">Start Over</button>
+    <button id="replay">Replay</button>
+  </div>    
+  <script>
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    camera.position.z = 20;
+    const light = new THREE.AmbientLight( 0xff0000 );
+    const light2 = new THREE.PointLight(0xffffff, 1, 100);
+
+    light2.position.set(10, 10, 10);
+
+    scene.add(light);
+    scene.add(light2);
+
+    const shapes = ['sphere', 'box', 'torus', 'dodecahedron', 'octahedron', 'tetrahedron'];
+
+    function createStructure(traits) {
+      const structure = new THREE.Object3D();
+
+      // Change the color as it recurses
+      const color = new THREE.Color().setHSL(traits.hue, 0.7, 0.5);
+      const material = new THREE.MeshPhongMaterial({ color, flatShading: false }); // Use MeshPhongMaterial for lighting effect
+
+      // Create geometry based on shapeType
+      let geometry;
+      switch (shapes[traits.shapeType]) {
+        case 'sphere':
+          geometry = new THREE.SphereGeometry(traits.size1, traits.radialSegments, traits.tubularSegments);
+          break;
+        case 'box':
+          geometry = new THREE.BoxGeometry(traits.size1, traits.size2, traits.size3);
+          break;
+        case 'torus':
+          geometry = new THREE.TorusGeometry(traits.size1, traits.size2, traits.radialSegments, traits.tubularSegments);
+          break;
+        case 'dodecahedron':
+          geometry = new THREE.DodecahedronGeometry(traits.size1);
+          break;
+        case 'octahedron':
+          geometry = new THREE.OctahedronGeometry(traits.size1);
+          break;
+        case 'tetrahedron':
+          geometry = new THREE.TetrahedronGeometry(traits.size1);
+          break;
+      }
+
+      const baseShape = new THREE.Mesh(geometry, material);
+      structure.add(baseShape);
+
+      // Create recursive sub-shapes
+      if (traits.recursionDepth > 0) {
+        const childTraits = { ...traits };
+        childTraits.hue = (traits.hue + traits.colorChange) % 1; // Slightly change the hue for each recursion
+        childTraits.recursionDepth -= 1;
+        childTraits.shapeType = (traits.shapeType + traits.recursiveShapeOffset) % 4; // Change the shape type for each recursion
+        console.log('next recursion')
+        for (let i = 0; i < traits.numBranches; i++) {
+          const subStructure = createStructure(childTraits);
+          subStructure.position.set(
+            traits.offsetX * (i+1),
+            traits.offsetY * (i+1),
+            traits.offsetZ * (i+1)
+          );
+          console.log(subStructure.position)
+          const rotationAxisX = new THREE.Vector3(1, 0, 0);
+          const rotationAxisY = new THREE.Vector3(0, 1, 0);
+          const rotationAxisZ = new THREE.Vector3(0, 0, 1);
+
+          subStructure.rotateOnAxis(rotationAxisX, traits.angleX * i);
+          subStructure.rotateOnAxis(rotationAxisY, traits.angleY * i);
+          subStructure.rotateOnAxis(rotationAxisZ, traits.angleZ * i);
+          subStructure.rotation.set(traits.angleX*i + structure.rotation.x, traits.angleY*i + structure.rotation.y, traits.angleZ*i + structure.rotation.z);
+          subStructure.scale.multiplyScalar(traits.scaleFactor);
+          structure.add(subStructure);
+        }
+      }
+      structure.traits = traits
+
+      return structure;
+    }
+
+    function randomInRange(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function randomTrait() {
+      return {
+        hue: Math.random(),
+        shapeType: Math.floor(Math.random() * 4),
+        size1: randomInRange(0.5, 3),
+        size2: randomInRange(0.5, 3),
+        size3: randomInRange(0.5, 3),
+        radialSegments: Math.floor(randomInRange(6, 16)),
+        tubularSegments: Math.floor(randomInRange(6, 16)),
+        angleX: randomInRange(-2*Math.PI, 2*Math.PI),
+        angleY: randomInRange(-2*Math.PI, 2*Math.PI),
+        angleZ: randomInRange(-2*Math.PI, 2*Math.PI),
+        scaleFactor: randomInRange(0.4, 0.8),
+        colorChange: randomInRange(0, 0.2),
+        recursionDepth: Math.floor(randomInRange(1, 4)),
+        numBranches: Math.floor(randomInRange(1, 4)),
+        height: randomInRange(0.1, 10),
+        topRadius: randomInRange(0.2, 5),
+        bottomRadius: randomInRange(0.1, 2),
+        offsetX: randomInRange(-1, 1),
+        offsetY: randomInRange(-1, 1),
+        offsetZ: randomInRange(-1, 1),
+        rotationSpeedX: randomInRange(-0.01, 0.01),
+        rotationSpeedY: randomInRange(-0.01, 0.01),
+        rotationSpeedZ: randomInRange(-0.01, 0.01),
+        recursiveShapeOffset: Math.floor(randomInRange(0, 2)),
+      };
+    }
+
+    function mutateTrait(trait) {
+      const mutationChance = 0.2;
+      const mutationFactor = 0.5;
+
+      function mutateValue(value, range) {
+        if (Math.random() < mutationChance) {
+          const delta = (Math.random() * 2 - 1) * range;
+          return value + delta;
+        }
+        return value;
+      }
+
+      function mutateInt(value, range) {
+        if (Math.random() < mutationChance) {
+          const delta = Math.round((Math.random() * 2 - 1) * range);
+          return value + delta;
+        }
+        return value;
+      }
+
+      function mutateShapeType(value) {
+        if (Math.random() < mutationChance) {
+          return Math.floor(Math.random() * shapes.length);
+        }
+        return value;
+      }
+
+      const mutatedTrait = {
+        ...trait,
+        hue: Math.min(Math.max(mutateValue(trait.hue, mutationFactor), 0), 1),
+        shapeType: mutateShapeType(trait.shapeType),
+        size1: Math.min(Math.max(mutateValue(trait.size1, mutationFactor), 0.1), 10),
+        size2: Math.min(Math.max(mutateValue(trait.size2, mutationFactor), 0.1), 10),
+        size3: Math.min(Math.max(mutateValue(trait.size3, mutationFactor), 0.1), 10),
+        radialSegments: Math.max(mutateInt(trait.radialSegments, 2), 3),
+        tubularSegments: Math.max(mutateInt(trait.tubularSegments, 2), 3),
+        angleX: mutateValue(trait.angleX, Math.PI / 4 * mutationFactor),
+        angleY: mutateValue(trait.angleY, Math.PI / 4 * mutationFactor),
+        angleZ: mutateValue(trait.angleZ, Math.PI / 4 * mutationFactor),
+        scaleFactor: Math.min(Math.max(mutateValue(trait.scaleFactor, mutationFactor), 0.1), 1.2),
+        colorChange: Math.min(Math.max(mutateValue(trait.colorChange, mutationFactor*0.1), 0), 1),
+        recursionDepth: Math.min(Math.max(mutateInt(trait.recursionDepth, 1), 1), 8),
+        numBranches: Math.min(Math.max(mutateInt(trait.numBranches, 1), 2), 8),
+        height: Math.max(Math.min(mutateValue(trait.height, mutationFactor), 10), -10),
+        topRadius: Math.max(mutateValue(trait.topRadius, mutationFactor), 0.1),
+        bottomRadius: Math.max(mutateValue(trait.bottomRadius, mutationFactor * 2), 0.1),
+        offsetX: mutateValue(trait.offsetX, mutationFactor),
+        offsetY: mutateValue(trait.offsetY, mutationFactor),
+        offsetZ: mutateValue(trait.offsetZ, mutationFactor),
+        rotationSpeedX: mutateValue(trait.rotationSpeedX, mutationFactor * 0.02),
+        rotationSpeedY: mutateValue(trait.rotationSpeedY, mutationFactor * 0.02),
+        rotationSpeedZ: mutateValue(trait.rotationSpeedZ, mutationFactor * 0.02),
+        recursiveShapeOffset: Math.max(mutateInt(trait.recursiveShapeOffset, 1),0),
+      };
+
+      return mutatedTrait;
+    }
+
+
+    const structures = [];
+    for (let i = 0; i < 4; i++) {
+      const traits = randomTrait();
+      const structure = createStructure(traits);
+      structures.push(structure);
+      scene.add(structure);
+    }
+    structures[0].position.set(-10, 10, 0); // Top-left
+    structures[1].position.set(10, 10, 0); // Top-right
+    structures[2].position.set(-10, -10, 0); // Bottom-left
+    structures[3].position.set(10, -10, 0); // Bottom-right
+    camera.position.z = 30;
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Line.threshold = 1; // Increase the threshold value
+
+    const mouse = new THREE.Vector2();
+
+    document.addEventListener('click', onMouseClick);
+
+    function updateStructures(clickedStructureIndex) {
+      const clickedStructure = structures[clickedStructureIndex];
+
+     if (clickedStructure) {
+        const selectedTraits = clickedStructure.traits;
+
+        for (let i = 0; i < structures.length; i++) {
+          let newTraits;
+          if (structures[i] === clickedStructure) {
+            newTraits = selectedTraits;
+          } else {
+            newTraits = mutateTrait(selectedTraits);
+          }
+
+          const newStructure = createStructure(newTraits);
+          newStructure.position.copy(structures[i].position);
+          scene.add(newStructure);
+
+          // Remove the old structure and replace it with the new one
+          disposeStructure(structures[i]);
+          scene.remove(structures[i]);
+          structures[i] = newStructure;
+        }
+      }
+    }
+
+
+    function onMouseClick(event) {
+      event.preventDefault();
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      if (intersects.length > 0) {
+        let clickedObject = intersects[0].object;
+        
+        // Traverse up the object tree to find the root structure object
+        while (clickedObject.parent !== scene) {
+          clickedObject = clickedObject.parent;
+        }
+
+        const structureIndex = structures.indexOf(clickedObject);
+        if (structureIndex !== -1) {
+          updateStructures(structureIndex);
+        }
+      }
+    }
+
+    function disposeStructure(structure) {
+      structure.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          child.material.dispose();
+        }
+      });
+    }
+
+    let zoomSpeed = 1.05;
+
+    // Store the initial structure positions in an array
+    let initialStructurePositions = structures.map(structure => new THREE.Vector3().copy(structure.position));
+
+    // Set min and max values for FOV
+    let minFOV = 10;
+    let maxFOV = 170;
+
+    function onMouseWheel(event) {
+      // Determine the zoom direction
+      let zoomDirection = (event.deltaY > 0) ? zoomSpeed : 1 / zoomSpeed;
+
+      // Calculate new FOV 
+      console.log(camera.fov)
+
+      let newFOV = camera.fov * zoomDirection;
+
+      // Check if the new FOV are within the min/max ranges
+      if (newFOV >= minFOV && newFOV <= maxFOV) {
+        // Update the camera's field of view and position
+        camera.fov = newFOV;
+        camera.updateProjectionMatrix();
+
+        // Update the structures' positions
+        structures.forEach((structure, index) => {
+          const initialPosition = initialStructurePositions[index];
+          const scaleFactor = camera.fov/75;
+          structure.position.x = initialPosition.x * scaleFactor;
+          structure.position.y = initialPosition.y * scaleFactor;
+        });
+      }
+    }
+
+    // Attach the event listener
+    window.addEventListener('wheel', onMouseWheel);
+
+    const startOverButton = document.getElementById('startOver');
+    const replayButton = document.getElementById('replay');
+
+    startOverButton.addEventListener('click', () => {
+      for (let i = 0; i < 4; i++) {
+        scene.remove(structures[i]);
+        const newTraits = randomTrait();
+        structures[i] = createStructure(newTraits);
+        structures[i].position.copy(initialStructurePositions[i]);
+        scene.add(structures[i]);
+      }
+    });
+
+    replayButton.addEventListener('click', () => {
+      for (const structure of structures) {
+        structure.rotation.set(0, 0, 0);
+      }
+    });
+
+
+
+    function animate() {
+      requestAnimationFrame(animate);
+      for (let structure of structures) {
+        structure.rotation.x += structure.traits.rotationSpeedX;
+        structure.rotation.y += structure.traits.rotationSpeedY;
+        structure.rotation.z += structure.traits.rotationSpeedZ;
+      }
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
